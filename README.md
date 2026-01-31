@@ -19,11 +19,11 @@ Please let it work in hosting and i think that it will be funny space for you an
 ## How to use
 Firstly you need to download files(host and client parts)and after you need to make file work with:
 
-’’ bash
+
 go run host.go
 // in other terminal
 go run client.go
-’’
+
 
 I also want you to send your feedback about using this console app :3
 
