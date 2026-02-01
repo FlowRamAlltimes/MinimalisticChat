@@ -1,0 +1,120 @@
+package main // so im writing my tcp chat
+// i know that its so bad
+import ( // i will make an update soon
+        "fmt" // i wanna to make /health or /clients
+        "log"
+        "net"
+        "strings"
+        "sync"
+)
+
+type server struct { // yeah i did it, im going to make client part
+        mu          sync.RWMutex // i think i will be way easier
+        clients     map[net.Conn]bool
+        nicknames   map[net.Conn]string // you can check commits, i will make new github as i lost my password
+        clientNicks []string
+}
+
+// i know im stupd :0
+
+func (s *server) newConnection(conn net.Conn) {
+        defer conn.Close()
+
+        s.mu.RLock()
+        s.clients[conn] = true
+        s.mu.RUnlock()
+
+        defer func() {
+                s.mu.Lock()
+                nickname, exists := s.nicknames[conn]
+
+                delete(s.clients, conn)
+                delete(s.nicknames, conn)
+
+                if exists {
+                        for i, n := range s.clientNicks {
+                                if n == nickname {
+                                        s.clientNicks = append(s.clientNicks[:i], s.clientNicks[i+1:]...)
+                                        break
+                                }
+                        }
+                }
+                s.mu.Unlock()
+                log.Printf("User left us: %v", conn.RemoteAddr())
+        }()
+
+        log.Printf("New urer: %v", conn.RemoteAddr())
+
+        buf := make([]byte, 1024)
+        for {
+                n, err := conn.Read(buf)
+                if err != nil {
+                        log.Printf("Reading error")
+                        return
+                }
+                msg := string(buf[:n])
+
+                msg = strings.TrimSpace(msg)
+                if strings.HasPrefix(msg, ".NEEDYOURDATA.") {
+                        s.mu.RLock()
+                        data := strings.Join(s.clientNicks, "\n")
+                        s.mu.RUnlock()
+                        _, err := conn.Write([]byte(data))
+                        if err != nil {
+                                log.Printf("Unexpected error")
+                        }
+                        continue
+                }
+                if strings.HasPrefix(msg, "NICK:") {
+                        nickname := strings.TrimPrefix(msg, "NICK:")
+                        s.registerUser(nickname, conn)
+                        conn.Write([]byte("REGISTERED"))
+                        continue
+                }
+                log.Printf("New message: %s by: %v", msg, conn.RemoteAddr())
+
+                s.broadcast(conn, msg)
+        }
+}
+func (s *server) registerUser(nickname string, conn net.Conn) {
+        s.mu.Lock()
+        s.clients[conn] = true
+        s.nicknames[conn] = nickname
+        s.clientNicks = append(s.clientNicks, nickname)
+        s.mu.Unlock()
+}
+func (s *server) broadcast(conn net.Conn, msg string) { // this function makes the broadcast
+        s.mu.RLock()                      // it is forbidden to make a mistake
+        for value, _ := range s.clients { // im just a kid :)
+                if value == conn {
+                        continue
+                } else {
+                        _, err := value.Write([]byte(msg))
+                        if err != nil {
+                                log.Println("Writing error...", err)
+                        }
+                }
+        }
+        s.mu.RUnlock()
+}
+func main() {
+        fmt.Println("Hello")
+        s := &server{
+                clients:     make(map[net.Conn]bool),
+                nicknames:   make(map[net.Conn]string),
+                clientNicks: []string{},
+        }
+        listener, err := net.Listen("tcp", ":8080")
+        if err != nil {
+                log.Printf("Error of creating")
+                log.Fatal(err)
+        }
+        defer listener.Close()
+        for {
+                conn, err := listener.Accept()
+                if err != nil {
+                        log.Printf("Error of accepting")
+                }
+                go s.newConnection(conn)
+        }
+}
