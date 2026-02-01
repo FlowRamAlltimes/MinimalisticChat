@@ -1,13 +1,13 @@
-package main
+package main                // Hello
 
 import (
-        "bufio"
-        "fmt"
-        "log"
-        "net"
-        "os"
-        "strings"
-        "time"
+        "bufio"        //for writing 
+        "fmt"          //i think you know
+        "log"          //logging
+        "net"          //cool place for tcp/udp/ip
+        "os"           //os for checks env
+        "strings"      //convertation into strings
+        "time"         //ping and other things
 )
 
 func readServerMessages(conn net.Conn) {
