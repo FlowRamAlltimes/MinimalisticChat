@@ -1,8 +1,8 @@
-# Minimalistic Chat v1.0
+# Minimalistic Chat v1.1
 Classical TCP chat made with GoLang.
 
 I have spent just 4 days for first version
-
+IDK how much time for first update but at least 5 days of laziness
 So you can download it and use now.
 
 ## Requirements
@@ -18,6 +18,9 @@ The minimum-interface tcp chat. Just pet-project, nothing more.
 ```bash
 /health - sends you informatin about server
 /list - sends you all active members
+/help - shows all info
+/exit - leave the server
+/quit - leave the sever
 ```
 
 ## How to use
