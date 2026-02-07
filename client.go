@@ -10,6 +10,17 @@ import (
 	"time"    //ping and other things
 )
 
+func info() {
+	fmt.Println("v1.1207")
+	fmt.Println("WELCOME TO MY TCP CHAT")
+	fmt.Println("It's wonderful place where you can talk with your friends")
+	fmt.Println("If you are fan of old typed chats, I can show you it")
+	fmt.Println("Send your first message!")
+	fmt.Println("Use /help for list of commands")
+}
+func myIp(conn net.Conn) {
+	fmt.Println("Your IP address is:", conn.RemoteAddr())
+}
 func exitFunc() {
 	os.Exit(0)
 }
@@ -102,6 +113,14 @@ func main() {
 		} else if text == "/quit" || text == "/exit" {
 			go func() {
 				exitFunc()
+			}()
+		} else if text == "/ip" {
+			go func() {
+				myIp(conn)
+			}()
+		} else if text == "/info" {
+			go func() {
+				info()
 			}()
 		}
 		_, err := conn.Write([]byte(nick + ":" + text + "\n"))
