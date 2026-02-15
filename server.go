@@ -1,51 +1,65 @@
 package main // so im writing my tcp chat
 // i know that its so bad
 import ( // i will make an update soon
+	"crypto/tls"
 	"fmt" // i wanna to make /health or /clients
 	"log"
 	"net"
+	"runtime"
 	"strings"
 	"sync"
+	"time"
 )
 
 type server struct { // yeah i did it, im going to make client part
-	mu          sync.RWMutex // i think i will be way easier
-	clients     map[net.Conn]bool
-	nicknames   map[net.Conn]string // you can check commits, i will make new github as i lost my password
-	clientNicks []string
-}
+	mu        sync.RWMutex // i think i will be way easier
+	clients   map[net.Conn]bool
+	nicknames map[net.Conn]string // you can check commits, i will make new github as i lost my password
 
+	startTime    time.Time
+	messagesSend uint64
+}
+addr := fmt.Sprintf(":8080")
+addrForPing := fmt.Sprintf("localhost:8080")
 // i know im stupd :0
+func (s *server) serverCommands(msg string, count int) {
+	if msg == "/status" {
+		start := time.Now()
+		_, err := net.Dial("tcp", addrForPing)
+		if err != nil {
+			fmt.Printf("Ping error")
+			log.Println(err)
+		}
+		end := time.Since(start).Round(time.Millisecond)
+		uptime := time.Since(s.startTime)
+		fmt.Println("All messages:", count)
+		fmt.Println("Ping:", end)
+		fmt.Println("Uptime:", uptime)
+		fmt.Println("Active connections:", len(s.nicknames))
+		fmt.Println("Go version:", runtime.Version())
+	}
+}
 
 func (s *server) newConnection(conn net.Conn) {
 	defer conn.Close()
 
-	s.mu.RLock()
+	s.mu.Lock()
 	s.clients[conn] = true
-	s.mu.RUnlock()
+	s.mu.Unlock()
 
 	defer func() {
 		s.mu.Lock()
-		nickname, exists := s.nicknames[conn]
 
 		delete(s.clients, conn)
 		delete(s.nicknames, conn)
 
-		if exists {
-			for i, n := range s.clientNicks {
-				if n == nickname {
-					s.clientNicks = append(s.clientNicks[:i], s.clientNicks[i+1:]...)
-					break
-				}
-			}
-		}
 		s.mu.Unlock()
 		log.Printf("User left us: %v", conn.RemoteAddr())
 	}()
 
 	log.Printf("New urer: %v", conn.RemoteAddr())
 
-	buf := make([]byte, 1024)
+	buf := make([]byte, 256)
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
@@ -55,36 +69,48 @@ func (s *server) newConnection(conn net.Conn) {
 		msg := string(buf[:n])
 
 		msg = strings.TrimSpace(msg)
-		if strings.HasPrefix(msg, ".NEEDYOURDATA.") {
+
+		switch {
+		case strings.HasPrefix(msg, ".NEEDYOURDATA."):
 			s.mu.RLock()
-			data := strings.Join(s.clientNicks, "\n")
+
+			var nicks []string
+			for _, nick := range s.nicknames {
+				nicks = append(nicks, nick)
+			}
+
 			s.mu.RUnlock()
+
+			data := strings.Join(nicks, "\n")
 			_, err := conn.Write([]byte(data))
 			if err != nil {
-				log.Printf("Unexpected error")
+				log.Println(err)
 			}
+
 			continue
-		} else if strings.HasPrefix(msg, "NICK:") {
+
+		case strings.HasPrefix(msg, "NICK:"):
 			nickname := strings.TrimPrefix(msg, "NICK:")
+
 			s.registerUser(nickname, conn)
-			conn.Write([]byte("REGISTERED"))
+			conn.Write([]byte("Registered"))
 			continue
-		} else if strings.HasPrefix(msg, "/quit") || strings.HasPrefix(msg, "/exit") || strings.HasPrefix(msg, "/help") || strings.HasPrefix(msg, "/ip") || strings.HasPrefix(msg, "/health") || strings.HasPrefix(msg, "/info") || strings.HasPrefix(msg, "/list") {
-			continue
-		} else {
+		default:
 			log.Printf("New message: %s by: %v", msg, conn.RemoteAddr())
 			s.broadcast(conn, msg)
 		}
 	}
 }
 func (s *server) registerUser(nickname string, conn net.Conn) {
+
 	s.mu.Lock()
 	s.clients[conn] = true
 	s.nicknames[conn] = nickname
-	s.clientNicks = append(s.clientNicks, nickname)
 	s.mu.Unlock()
 }
 func (s *server) broadcast(conn net.Conn, msg string) { // this function makes the broadcast
+
+	s.messagesSend++                  // count msgs
 	s.mu.RLock()                      // it is forbidden to make a mistake
 	for value, _ := range s.clients { // im just a kid :)
 		if value == conn {
@@ -99,18 +125,41 @@ func (s *server) broadcast(conn net.Conn, msg string) { // this function makes t
 	s.mu.RUnlock()
 }
 func main() {
-	fmt.Println("Hello")
+
 	s := &server{
-		clients:     make(map[net.Conn]bool),
-		nicknames:   make(map[net.Conn]string),
-		clientNicks: []string{},
+		clients:   make(map[net.Conn]bool),
+		nicknames: make(map[net.Conn]string),
+		startTime: time.Now(),
 	}
-	listener, err := net.Listen("tcp", ":8080")
+
+	cert, err := tls.LoadX509KeyPair("server.crt", "server.key")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	config := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+
+	listener, err := tls.Listen("tcp", addr, config)
 	if err != nil {
 		log.Printf("Error of creating")
 		log.Fatal(err)
 	}
+
+	fmt.Println("TLS server is being worked!")
+	fmt.Println("Listening port is :") // WRITE YOUR PORT FOR LOGS
+
 	defer listener.Close()
+
+	go func() {
+		for {
+			var guess string
+			fmt.Scan(&guess)
+			go s.serverCommands(guess, int(s.messagesSend))
+		}
+	}()
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
