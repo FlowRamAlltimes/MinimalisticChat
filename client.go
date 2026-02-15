@@ -1,7 +1,9 @@
 package main // Hello
 
 import (
-	"bufio"   //for writing
+	"bufio" //for writing
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"     //i think you know
 	"log"     //logging
 	"net"     //cool place for tcp/udp/ip
@@ -9,7 +11,7 @@ import (
 	"strings" //convertation into strings
 	"time"    //ping and other things
 )
-
+addr := fmt.Sprintf("localhost:8080") // ENTER YOUR ADDR IN ANY WAY!!!
 func info() {
 	fmt.Println("v1.1207")
 	fmt.Println("WELCOME TO MY TCP CHAT")
@@ -47,9 +49,10 @@ func readServerMessages(conn net.Conn) {
 }
 func healthCheck() {
 	start := time.Now()
-	_, err := net.DialTimeout("tcp", "localhost:8080", 1*time.Second)
+	_, err := net.DialTimeout("tcp", addr, 1*time.Second)
 	if err != nil {
 		log.Printf("connection error")
+		fmt.Println(err)
 		return
 	}
 	result := time.Since(start).Round(time.Millisecond)
@@ -74,7 +77,20 @@ func list(conn net.Conn) {
 }
 
 func main() {
-	conn, err := net.DialTimeout("tcp", "localhost:8080", 2*time.Second)
+	caCert, err := os.ReadFile("ca.crt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		log.Fatal("We couldnt add crt: file is invalid or isnt PEM")
+	}
+	config := &tls.Config{
+		RootCAs:            caCertPool,
+		ServerName:         "addr",
+		InsecureSkipVerify: false,
+	}
+	conn, err := tls.Dial("tcp", addr, config)
 	if err != nil {
 		log.Printf("Connection error, try again later")
 		log.Printf("If it does not help, contact me in tg: @ramhely")
@@ -102,26 +118,32 @@ func main() {
 			go func() {
 				healthCheck()
 			}()
+			continue
 		} else if text == "/list" {
 			go func() {
 				list(conn)
 			}()
+			continue
 		} else if text == "/help" {
 			go func() {
 				helplist()
 			}()
+			continue
 		} else if text == "/quit" || text == "/exit" {
 			go func() {
 				exitFunc()
 			}()
+			continue
 		} else if text == "/ip" {
 			go func() {
 				myIp(conn)
 			}()
+			continue
 		} else if text == "/info" {
 			go func() {
 				info()
 			}()
+			continue
 		}
 		_, err := conn.Write([]byte(nick + ":" + text + "\n"))
 		if err != nil {
@@ -129,3 +151,4 @@ func main() {
 		}
 	}
 }
+
