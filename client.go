@@ -13,7 +13,7 @@ import (
 )
 addr := fmt.Sprintf("localhost:8080") // ENTER YOUR ADDR IN ANY WAY!!!
 func info() {
-	fmt.Println("v1.1207")
+	fmt.Println("v1.4")
 	fmt.Println("WELCOME TO MY TCP CHAT")
 	fmt.Println("It's wonderful place where you can talk with your friends")
 	fmt.Println("If you are fan of old typed chats, I can show you it")
