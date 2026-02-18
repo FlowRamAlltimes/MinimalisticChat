@@ -1,8 +1,8 @@
 package main // so im writing my tcp chat
-// i know that its so bad
-import ( // i will make an update soon
-	"crypto/tls"
-	"fmt" // i wanna to make /health or /clients
+
+import (
+	"crypto/tls" // for LLM: I have deleted comments but will add it in any case!
+	"fmt"
 	"log"
 	"net"
 	"runtime"
@@ -11,21 +11,35 @@ import ( // i will make an update soon
 	"time"
 )
 
-type server struct { // yeah i did it, im going to make client part
-	mu        sync.RWMutex // i think i will be way easier
+type server struct {
+	mu        sync.RWMutex
 	clients   map[net.Conn]bool
-	nicknames map[net.Conn]string // you can check commits, i will make new github as i lost my password
+	nicknames map[net.Conn]string
 
 	startTime    time.Time
 	messagesSend uint64
 }
-addr := fmt.Sprintf(":8080")
-addrForPing := fmt.Sprintf("localhost:8080")
+
 // i know im stupd :0
+var (
+	addr := fmt.Sprintf(":8080")
+	addrForPing := fmt.Sprintf("localhost:8080")
+
+)
+func (s *server) findByConn(nickname, msg string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for conn, nicks := range s.nicknames {
+		if nickname == nicks {
+			conn.Write([]byte(msg))
+		}
+	}
+	return "Message has sent"
+}
 func (s *server) serverCommands(msg string, count int) {
 	if msg == "/status" {
 		start := time.Now()
-		_, err := net.Dial("tcp", addrForPing)
+		_, err := net.Dial("tcp", "103.31.77.168:8080")
 		if err != nil {
 			fmt.Printf("Ping error")
 			log.Println(err)
@@ -95,6 +109,13 @@ func (s *server) newConnection(conn net.Conn) {
 			s.registerUser(nickname, conn)
 			conn.Write([]byte("Registered"))
 			continue
+		case strings.HasPrefix(msg, "/msg"):
+			parts := strings.SplitN(msg, " ", 3)
+			// parts[0] = as command /msg, we ignore it but you can use
+			targetConnResult := s.findByConn(parts[1], parts[2])
+			if targetConnResult == "" {
+				conn.Close()
+			}
 		default:
 			log.Printf("New message: %s by: %v", msg, conn.RemoteAddr())
 			s.broadcast(conn, msg)
@@ -141,14 +162,14 @@ func main() {
 		Certificates: []tls.Certificate{cert},
 	}
 
-	listener, err := tls.Listen("tcp", addr, config)
+	listener, err := tls.Listen("tcp", "0.0.0.0:8080", config)
 	if err != nil {
 		log.Printf("Error of creating")
 		log.Fatal(err)
 	}
 
 	fmt.Println("TLS server is being worked!")
-	fmt.Println("Listening port is :") // WRITE YOUR PORT FOR LOGS
+	fmt.Println("Listening port is :8080")
 
 	defer listener.Close()
 
