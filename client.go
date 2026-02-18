@@ -4,6 +4,7 @@ import (
 	"bufio" //for writing
 	"crypto/tls"
 	"crypto/x509"
+	_ "embed"
 	"fmt"     //i think you know
 	"log"     //logging
 	"net"     //cool place for tcp/udp/ip
@@ -11,9 +12,12 @@ import (
 	"strings" //convertation into strings
 	"time"    //ping and other things
 )
-addr := fmt.Sprintf("localhost:8080") // ENTER YOUR ADDR IN ANY WAY!!!
+var (
+	addr := fmt.Sprintf("localhost")
+	addrport := fmt.Sprintf("localhost:8080")
+	)
 func info() {
-	fmt.Println("v1.4")
+	fmt.Println("v1.5")
 	fmt.Println("WELCOME TO MY TCP CHAT")
 	fmt.Println("It's wonderful place where you can talk with your friends")
 	fmt.Println("If you are fan of old typed chats, I can show you it")
@@ -49,7 +53,7 @@ func readServerMessages(conn net.Conn) {
 }
 func healthCheck() {
 	start := time.Now()
-	_, err := net.DialTimeout("tcp", addr, 1*time.Second)
+	_, err := net.DialTimeout("tcp", addrport, 1*time.Second)
 	if err != nil {
 		log.Printf("connection error")
 		fmt.Println(err)
@@ -76,21 +80,26 @@ func list(conn net.Conn) {
 	fmt.Println(msg)
 }
 
+//go:embed ca.crt
+var embeddedCert []byte
+
 func main() {
-	caCert, err := os.ReadFile("ca.crt")
-	if err != nil {
-		log.Fatal(err)
-	}
+	caCert := embeddedCert
+
 	caCertPool := x509.NewCertPool()
 	if !caCertPool.AppendCertsFromPEM(caCert) {
 		log.Fatal("We couldnt add crt: file is invalid or isnt PEM")
+	}
+
+	if len(caCert) == 0 {
+		panic("Cert is unaviable or isnt in workdir!")
 	}
 	config := &tls.Config{
 		RootCAs:            caCertPool,
 		ServerName:         "addr",
 		InsecureSkipVerify: false,
 	}
-	conn, err := tls.Dial("tcp", addr, config)
+	conn, err := tls.Dial("tcp", "addrport", config)
 	if err != nil {
 		log.Printf("Connection error, try again later")
 		log.Printf("If it does not help, contact me in tg: @ramhely")
@@ -144,6 +153,13 @@ func main() {
 				info()
 			}()
 			continue
+		} else if strings.HasPrefix(text, "/msg") {
+			_, err := conn.Write([]byte(text))
+			if err != nil {
+				log.Printf("Error while sending private msg!")
+				continue
+			}
+			continue
 		}
 		_, err := conn.Write([]byte(nick + ":" + text + "\n"))
 		if err != nil {
@@ -151,4 +167,3 @@ func main() {
 		}
 	}
 }
-
