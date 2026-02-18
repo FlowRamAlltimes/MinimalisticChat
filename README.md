@@ -1,14 +1,7 @@
- # Minimalistic Chat v1.4
+ # Minimalistic Chat v1.5
 
-Classical TCP chat made with GoLang.
-
-
-I have spent just 4 days for first version
-
-IDK how much time for first update but at least 5 days of laziness
-
-So you can download it and use now.
-
+Cli TCP chat based on golang
+So you can download it and use now in releases
 
 ## Requirements
 
@@ -16,15 +9,12 @@ So you can download it and use now.
 
 2. Friend or somebody else and a bit of time
 
-3. Knowleges in docker & Ansible for hosting somewhere
-
-4. The disire to support me(it's my first MVP useful project)
-
+3. The disire to support me
 
 ## Description
 
 The minimum-interface tcp chat. Just pet-project, nothing more.
-
+I used RWMutex and gorutines. I hope without race conditions
 
 ## Useful commands
 
@@ -42,6 +32,8 @@ Client part
 
 /quit - leave the sever
 
+/msg Nickname Message - send private message
+
 ```
 
 Server part 
@@ -49,6 +41,8 @@ Server part
 ```bash
 
 /status - all necessary information
+
+// also you'll get logs with 
 
 ```
 
