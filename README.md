@@ -1,7 +1,7 @@
- # Minimalistic Chat v1.5
+ # 📞Minimalistic Chat v1.5
 
 Cli TCP chat based on golang
-So you can download it and use now in releases
+So you can download it and use now in releases. Made on x86/amd64🖥️
 
 ## Requirements
 
