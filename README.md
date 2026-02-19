@@ -44,6 +44,8 @@ Server part
 
 /status - all necessary information
 
+/members - check all ip addresses and their owners!
+
 // also you'll get logs with 
 
 ```
