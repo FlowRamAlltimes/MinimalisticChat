@@ -50,7 +50,7 @@ func readServerMessages(conn net.Conn) {
 }
 func healthCheck() {
 	start := time.Now()
-	_, err := net.DialTimeout("tcp", "103.31.77.168:8080", 1*time.Second)
+	_, err := net.DialTimeout("tcp", ":8080", 1*time.Second) // addr
 	if err != nil {
 		log.Printf("connection error")
 		fmt.Println(err)
@@ -93,10 +93,10 @@ func main() {
 	}
 	config := &tls.Config{
 		RootCAs:            caCertPool,
-		ServerName:         "103.31.77.168",
+		ServerName:         "", // addr
 		InsecureSkipVerify: false,
 	}
-	conn, err := tls.Dial("tcp", "103.31.77.168:8080", config)
+	conn, err := tls.Dial("tcp", ":8080", config) // addr
 	if err != nil {
 		log.Printf("Connection error, try again later")
 		log.Printf("If it does not help, contact me in tg: @ramhely")
