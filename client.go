@@ -12,10 +12,7 @@ import (
 	"strings" //convertation into strings
 	"time"    //ping and other things
 )
-var (
-	addr := fmt.Sprintf("localhost")
-	addrport := fmt.Sprintf("localhost:8080")
-	)
+
 func info() {
 	fmt.Println("v1.5")
 	fmt.Println("WELCOME TO MY TCP CHAT")
@@ -40,7 +37,7 @@ func helplist() { // help function its very cool
 	fmt.Println("=============================")
 }
 func readServerMessages(conn net.Conn) {
-	buf := make([]byte, 1024)
+	buf := make([]byte, 256)
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
@@ -53,7 +50,7 @@ func readServerMessages(conn net.Conn) {
 }
 func healthCheck() {
 	start := time.Now()
-	_, err := net.DialTimeout("tcp", addrport, 1*time.Second)
+	_, err := net.DialTimeout("tcp", "103.31.77.168:8080", 1*time.Second)
 	if err != nil {
 		log.Printf("connection error")
 		fmt.Println(err)
@@ -96,10 +93,10 @@ func main() {
 	}
 	config := &tls.Config{
 		RootCAs:            caCertPool,
-		ServerName:         "addr",
+		ServerName:         "103.31.77.168",
 		InsecureSkipVerify: false,
 	}
-	conn, err := tls.Dial("tcp", "addrport", config)
+	conn, err := tls.Dial("tcp", "103.31.77.168:8080", config)
 	if err != nil {
 		log.Printf("Connection error, try again later")
 		log.Printf("If it does not help, contact me in tg: @ramhely")
@@ -124,9 +121,7 @@ func main() {
 		if text == "" {
 			break
 		} else if text == "/health" {
-			go func() {
-				healthCheck()
-			}()
+			go healthCheck()
 			continue
 		} else if text == "/list" {
 			go func() {
