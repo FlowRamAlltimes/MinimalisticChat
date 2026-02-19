@@ -21,36 +21,77 @@ type server struct {
 }
 
 // i know im stupd :0
-var (
-	addr := fmt.Sprintf(":8080")
-	addrForPing := fmt.Sprintf("localhost:8080")
+func (s *server) kickByConn(nickname string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-)
-func (s *server) findByConn(nickname, msg string) string {
+	for conn, nicksOfMap := range s.nicknames {
+		if nicksOfMap != nickname {
+			continue
+		} else if nicksOfMap == nickname {
+			log.Println("Target was kicked!")
+			conn.Write([]byte("You were kicked by console, think before doing!"))
+
+			delete(s.nicknames, conn)
+			delete(s.clients, conn)
+
+			log.Println("Target was deleted!")
+
+			conn.Close()
+			return true
+		} else {
+			log.Println("Nick doesnt exist. Check list!")
+		}
+	}
+	return false
+}
+func (s *server) findByConn(nickname, msg, userNickname string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	for conn, nicks := range s.nicknames {
 		if nickname == nicks {
-			conn.Write([]byte(msg))
+			conn.Write([]byte(userNickname + ":" + msg + "\n"))
 		}
 	}
 	return "Message has sent"
 }
 func (s *server) serverCommands(msg string, count int) {
-	if msg == "/status" {
+	switch {
+	case msg == "/status":
+
 		start := time.Now()
-		_, err := net.Dial("tcp", "103.31.77.168:8080")
+
+		_, err := net.Dial("tcp", ":8080") // your addr
 		if err != nil {
 			fmt.Printf("Ping error")
 			log.Println(err)
 		}
-		end := time.Since(start).Round(time.Millisecond)
+
+		end := time.Since(start).Round(time.Second)
+
 		uptime := time.Since(s.startTime)
 		fmt.Println("All messages:", count)
 		fmt.Println("Ping:", end)
 		fmt.Println("Uptime:", uptime)
 		fmt.Println("Active connections:", len(s.nicknames))
 		fmt.Println("Go version:", runtime.Version())
+	case msg == "/members":
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+
+		for connection, nick := range s.nicknames {
+			fmt.Println(nick, connection.RemoteAddr())
+		}
+
+	case strings.HasPrefix(msg, "/kick"):
+		partsOfKick := strings.SplitN(msg, " ", 2)
+		// partsOfKick[0] - /kick
+		// partsOfKick[1] - target
+
+		target := s.kickByConn(partsOfKick[1])
+		if target == false {
+			log.Println(partsOfKick[1], "hasnt been dleted")
+		}
 	}
 }
 
@@ -101,23 +142,33 @@ func (s *server) newConnection(conn net.Conn) {
 				log.Println(err)
 			}
 
+			log.Println(conn.RemoteAddr(), "has got info about users", time.Now().Format("15:06:30"))
+
 			continue
 
 		case strings.HasPrefix(msg, "NICK:"):
 			nickname := strings.TrimPrefix(msg, "NICK:")
 
 			s.registerUser(nickname, conn)
+			log.Println(nickname, "has registered now with ip:", conn.RemoteAddr(), time.Now().Format("15:06:30"))
 			conn.Write([]byte("Registered"))
 			continue
 		case strings.HasPrefix(msg, "/msg"):
 			parts := strings.SplitN(msg, " ", 3)
+			if len(parts) < 3 {
+				conn.Write([]byte("You forgot nicks/message, check it!"))
+			}
 			// parts[0] = as command /msg, we ignore it but you can use
-			targetConnResult := s.findByConn(parts[1], parts[2])
+			// parts[1] = target nickname
+			// parts[2] = message for target nickname
+			// all is easy
+			usrNick := s.nicknames[conn]
+			targetConnResult := s.findByConn(parts[1], parts[2], usrNick)
 			if targetConnResult == "" {
-				conn.Close()
+				conn.Write([]byte("Something went wrong, user doesnt exists or invalid type of wriring /msg targetUser Message"))
 			}
 		default:
-			log.Printf("New message: %s by: %v", msg, conn.RemoteAddr())
+			log.Printf("New message: %s by: %v", msg, conn.RemoteAddr(), time.Now().Format("15:06:30"))
 			s.broadcast(conn, msg)
 		}
 	}
@@ -131,7 +182,7 @@ func (s *server) registerUser(nickname string, conn net.Conn) {
 }
 func (s *server) broadcast(conn net.Conn, msg string) { // this function makes the broadcast
 
-	s.messagesSend++                  // count msgs
+	s.messagesSend++                  // count msgs for stats
 	s.mu.RLock()                      // it is forbidden to make a mistake
 	for value, _ := range s.clients { // im just a kid :)
 		if value == conn {
