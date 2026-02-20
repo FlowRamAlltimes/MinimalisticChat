@@ -3,7 +3,7 @@
 Cli TCP chat based on golang
 So you can download it and use now in releases. Made on x86/amd64🖥️
 
-Become mymentor please, I really like what I do!
+Become my mentor please, I really like what I do!
 
 ## Requirements
 
