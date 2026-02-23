@@ -1,7 +1,8 @@
- # 📞Minimalistic Chat v1.6
+ # 📞Minimalistic Chat v1.7
 
 Cli TCP chat based on golang
 So you can download it and use now in releases. Made on x86/amd64🖥️
+Also creates API next to it
 
 Become my mentor please, I really like what I do!
 
@@ -36,6 +37,8 @@ Client part
 
 /msg Nickname Message - send private message
 
+/Change - changes nick !!! do not use it, it can crash server easily
+
 ```
 
 Server part 
@@ -45,6 +48,8 @@ Server part
 /status - all necessary information
 
 /members - check all ip addresses and their owners!
+
+/kick usr - kick user by nick
 
 // also you'll get logs with 
 
@@ -103,6 +108,6 @@ go build -o client.go
 ```
 
 I also want you to send your feedback about using this console app :3
-
-
+I need to take a rest because I fell myself very tired due to school and limitless coding
+I will return in two days I think
 ## Star it please it will provide me for future updates 
