@@ -13,6 +13,10 @@ import (
 	"time"    //ping and other things
 )
 
+func changeNameWhileOnline(newname string, conn net.Conn) {
+	conn.Write([]byte(".1wannachangen1ck." + newname))
+	fmt.Printf("Changing nick...")
+}
 func info() {
 	fmt.Println("v1.5")
 	fmt.Println("WELCOME TO MY TCP CHAT")
@@ -50,7 +54,7 @@ func readServerMessages(conn net.Conn) {
 }
 func healthCheck() {
 	start := time.Now()
-	_, err := net.DialTimeout("tcp", ":8080", 1*time.Second) // addr
+	_, err := net.DialTimeout("tcp", "103.31.77.168:8080", 1*time.Second)
 	if err != nil {
 		log.Printf("connection error")
 		fmt.Println(err)
@@ -93,10 +97,10 @@ func main() {
 	}
 	config := &tls.Config{
 		RootCAs:            caCertPool,
-		ServerName:         "", // addr
+		ServerName:         "103.31.77.168",
 		InsecureSkipVerify: false,
 	}
-	conn, err := tls.Dial("tcp", ":8080", config) // addr
+	conn, err := tls.Dial("tcp", "103.31.77.168:8080", config)
 	if err != nil {
 		log.Printf("Connection error, try again later")
 		log.Printf("If it does not help, contact me in tg: @ramhely")
@@ -147,6 +151,9 @@ func main() {
 			go func() {
 				info()
 			}()
+			continue
+		} else if text == "/Change" {
+			go changeNameWhileOnline(nick, conn)
 			continue
 		} else if strings.HasPrefix(text, "/msg") {
 			_, err := conn.Write([]byte(text))
