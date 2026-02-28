@@ -18,4 +18,4 @@ sequenceDiagram
     
     Client->>Server: /dice
     Server-->>Client: Your number is: 6
-```
+
