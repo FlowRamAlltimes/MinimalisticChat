@@ -1,14 +1,14 @@
  # 📞Minimalistic Chat v1.7.1
 
 Cli TCP chat based on golang
-So you can download it and use now in releases. Made on x86/amd64🖥️
+So you can download it and use now in releases. Made for x86/64🖥️
 Also creates API next to it
 
 Become my mentor please, I really like what I do!
 
 ## Requirements
 
-1. Golang 1.22 at least (package math/rand/v2)
+1. (If you wanna take my code) - Go 1.22 at least
 
 2. Friend or somebody else and a bit of time
 
@@ -37,7 +37,7 @@ Client part
 
 /msg Nickname Message - send private message
 
-/Change - changes nick !!! do not use it, it can crash server easily
+/Change - changes nick 
 
 ```
 
@@ -53,7 +53,7 @@ Server part
 
 /ban usr - ban user by IP address
 
-// also you'll get logs with 
+## also you'll get logs with 
 
 ```
 
@@ -67,46 +67,39 @@ Firstly you need to download files (host and client parts from releases) and aft
 
 ```bash
 
-// Make your certificate on vps!
-
+## Make your certificate on vps! (Linux only)
 
 openssl genrsa -out ca.key 2048
 
 openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 -out ca.crt -subj "/CN=MyLocalCA"
 
-
 sudo nano server.conf // i use nano
 
-// Enter your config with your IP address in config, ask LLM about it
-
+## !Enter your config with your IP address in it
 
 openssl genrsa -out server.key 2048
 
 openssl req -new -key server.key -out server.csr -config server.conf
 
-
 openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 365 -sha256 -extfile server.conf -extensions v3_ext
 
+## on vps
 
-// after you should 
+./server ## or your name of file
 
-// on vps
+## copy ca.crt from the place where you generated cert to your local machine
 
-go build -o server.go
+./client ## or your name of file
 
-./server
+## thats all
 
+```
 
-// on local machine
+### Windows
+```bash
+## All what you need to do in Linux but
 
-go build -o client.go
-
-// copy ca.crt from vps
-
-./client
-
-// thats all
-
+./client.exe ## oe your file name
 ```
 
 I also want you to send your feedback about using this console app :3
