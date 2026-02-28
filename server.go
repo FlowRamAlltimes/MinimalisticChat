@@ -1,4 +1,4 @@
-package main // so im writing my tcp chat
+package main // My TCP chat is here
 
 import (
 	"bufio"
@@ -408,7 +408,7 @@ func (s *server) newConnection(conn net.Conn) {
 		case strings.HasPrefix(msg, ".1wannachangen1ck."):
 			newNickParts := strings.SplitN(msg, " ", 2)
 			// newNickParts[1] = new nickname
-			if len(newNickParts) > 2 {
+			if len(newNickParts) < 2 {
 				conn.Write([]byte("Check rules of writing nickname!"))
 				conn.Close()
 			}
@@ -438,9 +438,9 @@ func (s *server) registerUser(nickname string, conn net.Conn) {
 }
 func (s *server) broadcast(conn net.Conn, msg string) { // this function makes the broadcast
 
-	s.MessagesSend++                  // count msgs for stats
-	s.mu.RLock()                      // it is forbidden to make a mistake
-	for value, _ := range s.clients { // im just a kid :)
+	s.MessagesSend++
+	s.mu.RLock()
+	for value, _ := range s.clients {
 		if value == conn {
 			continue
 		} else {
@@ -556,6 +556,5 @@ func main() {
 		}
 	}
 }
-
 // I dont know how big it will be soon
 // cool, so i think that i'll grow up soon but who can know the truth if it isnt me . . .
