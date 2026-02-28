@@ -5,20 +5,35 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	_ "embed"
-	"fmt"     //i think you know
-	"log"     //logging
-	"net"     //cool place for tcp/udp/ip
-	"os"      //os for checks env
+	"fmt" //i think you know
+	"log" //logging
+	"math/rand/v2"
+	"net" //cool place for tcp/udp/ip
+	"os"  //os for checks env
+	"strconv"
 	"strings" //convertation into strings
 	"time"    //ping and other things
 )
+
+func dicefunc() string {
+	randNum := 0
+	for {
+		randNum = rand.IntN(6) + 1
+		if randNum != 0 {
+			break
+		}
+	}
+	randNumStr := strconv.Itoa(randNum)
+	randNumStrUpd := fmt.Sprintf("Your number is: %v", randNumStr)
+	return randNumStrUpd
+}
 
 func changeNameWhileOnline(newname string, conn net.Conn) {
 	conn.Write([]byte(".1wannachangen1ck." + newname))
 	fmt.Printf("Changing nick...")
 }
 func info() {
-	fmt.Println("v1.5")
+	fmt.Println("v1.7.1")
 	fmt.Println("WELCOME TO MY TCP CHAT")
 	fmt.Println("It's wonderful place where you can talk with your friends")
 	fmt.Println("If you are fan of old typed chats, I can show you it")
@@ -54,7 +69,7 @@ func readServerMessages(conn net.Conn) {
 }
 func healthCheck() {
 	start := time.Now()
-	_, err := net.DialTimeout("tcp", "103.31.77.168:8080", 1*time.Second)
+	_, err := net.DialTimeout("tcp", "89.125.71.105:8080", 1*time.Second)
 	if err != nil {
 		log.Printf("connection error")
 		fmt.Println(err)
@@ -97,10 +112,10 @@ func main() {
 	}
 	config := &tls.Config{
 		RootCAs:            caCertPool,
-		ServerName:         "103.31.77.168",
+		ServerName:         "89.125.71.105",
 		InsecureSkipVerify: false,
 	}
-	conn, err := tls.Dial("tcp", "103.31.77.168:8080", config)
+	conn, err := tls.Dial("tcp", "89.125.71.105:8080", config)
 	if err != nil {
 		log.Printf("Connection error, try again later")
 		log.Printf("If it does not help, contact me in tg: @ramhely")
@@ -155,6 +170,8 @@ func main() {
 		} else if text == "/Change" {
 			go changeNameWhileOnline(nick, conn)
 			continue
+		} else if text == "/dice" {
+			go dicefunc()
 		} else if strings.HasPrefix(text, "/msg") {
 			_, err := conn.Write([]byte(text))
 			if err != nil {
