@@ -1,4 +1,4 @@
- # 📞Minimalistic Chat v1.7
+ # 📞Minimalistic Chat v1.7.1
 
 Cli TCP chat based on golang
 So you can download it and use now in releases. Made on x86/amd64🖥️
@@ -8,11 +8,11 @@ Become my mentor please, I really like what I do!
 
 ## Requirements
 
-1. Golang 1.19 at least
+1. Golang 1.22 at least (package math/rand/v2)
 
 2. Friend or somebody else and a bit of time
 
-3. The disire to support me
+3. The disire to spend time here
 
 ## Description
 
@@ -51,6 +51,8 @@ Server part
 
 /kick usr - kick user by nick
 
+/ban usr - ban user by IP address
+
 // also you'll get logs with 
 
 ```
@@ -58,7 +60,7 @@ Server part
 
 ## How to use
 
-Firstly you need to download files(host and client parts from releases) and after you need to make file work with:
+Firstly you need to download files (host and client parts from releases) and after you need to make file work with:
 
 
 ### Linux
