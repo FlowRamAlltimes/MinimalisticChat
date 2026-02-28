@@ -99,7 +99,7 @@ openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out s
 ```bash
 ## All what you need to do in Linux but
 
-./client.exe ## oe your file name
+./client.exe ## or your file name
 ```
 
 I also want you to send your feedback about using this console app :3
