@@ -2,8 +2,9 @@ package main // so im writing my tcp chat
 
 import (
 	"bufio"
-	"crypto/tls" // for LLM: I have deleted comments but will add it in any case!
+	"crypto/tls"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -18,22 +19,95 @@ import (
 	"time"
 )
 
-const logfile = "server.log"
+const logfile = "server.log"  // files !WARNING! CHECK IF YOUR FILES USELESS BEFORE OR IT WILL BE PERFECTLY THAT TREY ARE NOT EXIST
+const banlist = "banlist.txt" // IF YOU HAVE THE SAME ONES IT WILL BETTER IF YOU RENAME THEM
 
 type server struct {
-	// so important part
-	mu        sync.RWMutex
-	clients   map[net.Conn]bool
-	nicknames map[net.Conn]string
+	// part of infrastructure
+	mu           sync.RWMutex
+	clients      map[net.Conn]bool
+	banaddresses map[string]string
+	nicknames    map[net.Conn]string // find user by ip in O(1)
+	addresses    map[string]net.Conn // find connection address by nick in O(1)
 	// part of metrics
-	StartTime    time.Time
-	MessagesSend uint64
+	StartTime    time.Time // uptime check
+	MessagesSend uint64    // all messages counting
 	// errors counting
 	ConnectionErrors  uint64
 	WritingErrors     uint64
 	CertificateErrors uint64
 	ReadingErrors     uint64
 	AcceptErrors      uint64
+}
+
+func (s *server) checkIpByBanning(conn net.Conn) bool {
+	s.mu.RLock()                                                         // locks
+	defer s.mu.RUnlock()                                                 // unlocks when done
+	remoteAddress, _, _ := net.SplitHostPort(conn.RemoteAddr().String()) // remote address
+	// checking for forbidden entrance
+	_, isBanned := s.banaddresses[remoteAddress]
+
+	if isBanned {
+		log.Printf("IP %s is in ban-list. Closing connection.", remoteAddress)
+		fmt.Fprintf(conn, "!_YOU HAD BEEN BANNED ON OUR SERVER_!")
+		conn.Close()
+		return true
+	}
+
+	return false
+}
+func (s *server) uploadMapForBan(conn net.Conn) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	remote, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+
+	file, err := os.Open(banlist) // opening file
+	if err != nil {
+		log.Printf("Error of opening file")
+		return ""
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		ip := strings.TrimSpace(scanner.Text())
+		if ip != "" {
+			s.banaddresses[ip] = "bannedByConsole"
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Printf("Error reading file: %v", err)
+	}
+
+	return remote
+}
+
+func (s *server) banWithIp(ip net.Conn) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stringIp, _, _ := net.SplitHostPort(ip.RemoteAddr().String())
+
+	f, err := os.OpenFile(banlist, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Printf("Error of opening banfile")
+	}
+	defer f.Close()
+
+	io.WriteString(f, stringIp)
+	ip.Write([]byte("You've been banned by ip address, see ya!"))
+
+	delete(s.clients, ip)
+	delete(s.nicknames, ip)
+	for nick, c := range s.addresses {
+		if c == ip {
+			delete(s.addresses, nick)
+		}
+	}
+
+	ip.Close()
+	return true
 }
 
 func getLoadAverage() float64 {
@@ -101,26 +175,25 @@ func (s *server) serverinfo(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(serverInformationInStruct)
 }
 func (s *server) infoPageOfChat(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello, its info endpoint of my chat, just test btw.")
-	fmt.Fprintf(w, "<p>I think that it will be helpful in future</p>")
+	fmt.Fprintf(w, "Hello, its info endpoint of my chat, just test btw. ")
+	fmt.Fprintf(w, "I think that it will be helpful in future. ")
 	fmt.Fprintf(w, "So its my online: %v", len(s.nicknames))
-	fmt.Fprintf(w, "Soon I add WebSockets and cool monitoring")
 }
 func (s *server) serverStatusJson(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	stats := struct {
-		Uptime                time.Duration `json:"uptime"`
-		AllMessages           uint64        `json:"all_messages"`
-		Errors                uint64        `json:"errors_since_start"`
-		Connect_errors        uint64        `json:"connection_errors"`
-		Writing_errors        uint64        `json:"writing_errors"`
-		Certificate_errors    uint64        `json:"certificate_errors"`
-		Reading_or_EOF_errors uint64        `json:"reading_errors"`
-		Accepting_errors      uint64        `json:"accepting_errors"`
-		AllUsersInActive      int           `json:"active_users"`
+		Uptime                string `json:"uptime"`
+		AllMessages           uint64 `json:"all_messages"`
+		Errors                uint64 `json:"errors_since_start"`
+		Connect_errors        uint64 `json:"connection_errors"`
+		Writing_errors        uint64 `json:"writing_errors"`
+		Certificate_errors    uint64 `json:"certificate_errors"`
+		Reading_or_EOF_errors uint64 `json:"reading_errors"`
+		Accepting_errors      uint64 `json:"accepting_errors"`
+		AllUsersInActive      int    `json:"active_users"`
 	}{
-		Uptime:                time.Since(s.StartTime).Round(time.Second),
+		Uptime:                time.Since(s.StartTime).Round(time.Second).String(),
 		AllMessages:           s.MessagesSend,
 		Errors:                s.ConnectionErrors + s.WritingErrors + s.CertificateErrors + s.ReadingErrors + s.AcceptErrors,
 		Connect_errors:        s.ConnectionErrors,
@@ -142,11 +215,13 @@ func (s *server) nickChange(nick string, connect net.Conn, oldNick string) bool 
 		for conn, _ := range s.nicknames {
 			if conn == connect {
 				// deleting old
+				delete(s.addresses, nick)
 				delete(s.nicknames, conn)
 				delete(s.clients, conn)
 				// appending new
 				s.clients[connect] = true
 				s.nicknames[connect] = nick
+				s.addresses[nick] = connect
 				return true
 			}
 		}
@@ -166,6 +241,7 @@ func (s *server) kickByConn(nickname string) bool {
 
 			delete(s.nicknames, conn)
 			delete(s.clients, conn)
+			delete(s.addresses, nicksOfMap)
 
 			log.Println("Target was deleted!")
 
@@ -187,13 +263,13 @@ func (s *server) findByConn(nickname, msg, userNickname string) string {
 	}
 	return "Message has sent"
 }
-func (s *server) serverCommands(msg string, count, connectErrors, readingErrors, acceptingError, certError, writingError int) {
+func (s *server) serverCommands(msg string, count, connectErrors, readingErrors, acceptingError, certError, writingError int, addr string) {
 	switch {
 	case msg == "/status":
 
 		start := time.Now()
 
-		_, err := net.Dial("tcp", "address:8080") // put addr
+		_, err := net.Dial("tcp", addr)
 		if err != nil {
 			fmt.Printf("Ping error")
 			s.ConnectionErrors++
@@ -233,7 +309,19 @@ func (s *server) serverCommands(msg string, count, connectErrors, readingErrors,
 
 		target := s.kickByConn(partsOfKick[1])
 		if target == false {
-			log.Println(partsOfKick[1], "hasnt been deleted")
+			log.Println(partsOfKick[1], "hasn't been deleted")
+		}
+	case strings.HasPrefix(msg, "/ban"):
+		partsOfBan := strings.SplitN(msg, " ", 2)
+		if len(partsOfBan) < 2 {
+			log.Printf("Follow the rules of /ban ActiveNickname")
+		}
+		conn := s.addresses[partsOfBan[1]]
+		res := s.banWithIp(conn)
+		if res == true {
+			log.Printf("Enemy has been banned by console: %s", partsOfBan[1])
+		} else {
+			log.Printf("Error while banning %s", partsOfBan[1])
 		}
 	}
 }
@@ -250,6 +338,11 @@ func (s *server) newConnection(conn net.Conn) {
 
 		delete(s.clients, conn)
 		delete(s.nicknames, conn)
+		for nick, c := range s.addresses {
+			if c == conn {
+				delete(s.addresses, nick)
+			}
+		}
 
 		s.mu.Unlock()
 		log.Printf("User left us: %v", conn.RemoteAddr())
@@ -340,6 +433,7 @@ func (s *server) registerUser(nickname string, conn net.Conn) {
 	s.mu.Lock()
 	s.clients[conn] = true
 	s.nicknames[conn] = nickname
+	s.addresses[nickname] = conn
 	s.mu.Unlock()
 }
 func (s *server) broadcast(conn net.Conn, msg string) { // this function makes the broadcast
@@ -360,6 +454,30 @@ func (s *server) broadcast(conn net.Conn, msg string) { // this function makes t
 	s.mu.RUnlock()
 }
 func main() {
+	address := flag.String("addr", "", "use for set address of server")
+	portForChat := flag.Int("p", 0, "use for setting port for chat")
+	portForRESTapi := flag.Int("pRst", 0, "use for setting port for REST API")
+
+	flag.Parse()
+
+	switch {
+	case *address == "":
+		fmt.Printf("U must set address for chat with -addr")
+		return
+	case *portForChat == 0:
+		fmt.Printf("U must set port for chat with -p")
+		return
+	case *portForRESTapi == 0:
+		fmt.Printf("U must set port for REST API with -pRst")
+		return
+	}
+
+	portForChatStr := strconv.Itoa(*portForChat)
+	addr := fmt.Sprintf(*address + ":" + portForChatStr)
+
+	portForRESTapiStr := strconv.Itoa(*portForRESTapi)
+	addrForRest := fmt.Sprintf(*address + ":" + portForRESTapiStr)
+
 	f, err := os.OpenFile(logfile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		fmt.Printf("Error of opening log-file: %v", logfile, err)
@@ -373,19 +491,23 @@ func main() {
 	log.Println("Log system has started")
 
 	s := &server{
-		clients:   make(map[net.Conn]bool),
-		nicknames: make(map[net.Conn]string),
-		StartTime: time.Now(),
+		clients:      make(map[net.Conn]bool),
+		nicknames:    make(map[net.Conn]string),
+		addresses:    make(map[string]net.Conn),
+		banaddresses: make(map[string]string),
+		StartTime:    time.Now(),
 	}
 
 	// http server stats in json
 	go func() {
-		http.HandleFunc("/", s.serverStatusJson)
-		http.HandleFunc("/info", s.infoPageOfChat)
-		http.HandleFunc("/server", s.serverinfo)
-		log.Printf("Server monitor is aviable on: https://address:8081") // put here addr 
-		// yeah I finally understood how to run server with https protocol 
-		http.ListenAndServeTLS("0.0.0.0:8081", "server.crt", "server.key", nil) // thats convenient as I can use I self-created cert for here
+		http.HandleFunc("/status", s.serverStatusJson)                      // first endpoint
+		http.HandleFunc("/info", s.infoPageOfChat)                          // and the second
+		http.HandleFunc("/server", s.serverinfo)                            // third
+		log.Printf("Server monitor is aviable on: https://%v", addrForRest) // yeah I finally understood how to run server with https protocol
+
+		portForRESTapiInListenTLS := fmt.Sprintf("0.0.0.0:" + portForRESTapiStr)
+
+		http.ListenAndServeTLS(portForRESTapiInListenTLS, "server.crt", "server.key", nil) // thats convenient as I can use I self-created cert for here
 	}()
 	cert, err := tls.LoadX509KeyPair("server.crt", "server.key") // and here, btw i used OpenSSL certs
 	if err != nil {
@@ -397,14 +519,16 @@ func main() {
 		Certificates: []tls.Certificate{cert},
 	}
 
-	listener, err := tls.Listen("tcp", "0.0.0.0:8080", config)
+	portForChatInListener := fmt.Sprintf("0.0.0.0:" + *&portForChatStr)
+
+	listener, err := tls.Listen("tcp", portForChatInListener, config)
 	if err != nil {
 		log.Printf("Error of creating")
 		log.Fatal(err)
 	}
 
 	fmt.Println("TLS server is being worked!")
-	fmt.Println("Listening port is :8080")
+	fmt.Printf("Listening port is: %v", portForChatStr)
 
 	defer listener.Close()
 
@@ -414,16 +538,24 @@ func main() {
 			commandReader := bufio.NewReader(os.Stdin)
 			guess, _ = commandReader.ReadString('\n')
 			guess = strings.TrimSpace(guess)
-			go s.serverCommands(guess, int(s.MessagesSend), int(s.ConnectionErrors), int(s.ReadingErrors), int(s.AcceptErrors), int(s.CertificateErrors), int(s.WritingErrors))
+			go s.serverCommands(guess, int(s.MessagesSend), int(s.ConnectionErrors), int(s.ReadingErrors), int(s.AcceptErrors), int(s.CertificateErrors), int(s.WritingErrors), addr)
 		}
 	}()
 
 	for {
 		conn, err := listener.Accept()
+
 		if err != nil {
 			s.AcceptErrors++
 			log.Printf("Error of accepting")
 		}
-		go s.newConnection(conn)
+
+		s.uploadMapForBan(conn)
+		if s.checkIpByBanning(conn) == false {
+			go s.newConnection(conn)
+		}
 	}
 }
+
+// I dont know how big it will be soon
+// cool, so i think that i'll grow up soon but who can know the truth if it isnt me . . .
