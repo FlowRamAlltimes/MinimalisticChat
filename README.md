@@ -73,7 +73,7 @@ openssl genrsa -out ca.key 2048
 
 openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 -out ca.crt -subj "/CN=MyLocalCA"
 
-sudo nano server.conf // i use nano
+sudo nano server.conf ## I use nano
 
 ## !Enter your config with your IP address in it
 
