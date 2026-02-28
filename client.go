@@ -4,7 +4,7 @@ import (
 	"bufio" //for writing
 	"crypto/tls"
 	"crypto/x509"
-	_ "embed"
+	"flag"
 	"fmt" //i think you know
 	"log" //logging
 	"math/rand/v2"
@@ -15,7 +15,7 @@ import (
 	"time"    //ping and other things
 )
 
-func dicefunc() string {
+func dicefunc() {
 	randNum := 0
 	for {
 		randNum = rand.IntN(6) + 1
@@ -25,7 +25,7 @@ func dicefunc() string {
 	}
 	randNumStr := strconv.Itoa(randNum)
 	randNumStrUpd := fmt.Sprintf("Your number is: %v", randNumStr)
-	return randNumStrUpd
+	fmt.Println(randNumStrUpd)
 }
 
 func changeNameWhileOnline(newname string, conn net.Conn) {
@@ -67,9 +67,11 @@ func readServerMessages(conn net.Conn) {
 		fmt.Printf(">> %s\n", msg)
 	}
 }
-func healthCheck() {
+func healthCheck(addr, port string) {
+	fullAddress := fmt.Sprintf(addr + ":" + port)
+
 	start := time.Now()
-	_, err := net.DialTimeout("tcp", "89.125.71.105:8080", 1*time.Second)
+	_, err := net.DialTimeout("tcp", fullAddress, 1*time.Second)
 	if err != nil {
 		log.Printf("connection error")
 		fmt.Println(err)
@@ -96,11 +98,19 @@ func list(conn net.Conn) {
 	fmt.Println(msg)
 }
 
-//go:embed ca.crt
-var embeddedCert []byte
-
 func main() {
-	caCert := embeddedCert
+	addr := flag.String("addr", "", "use -addr for connecting")
+	port := flag.String("p", "", "use -p for connecting")
+
+	flag.Parse()
+
+	fullAddress := fmt.Sprintf(*addr + ":" + *port)
+
+	caCert, err := os.ReadFile("ca.crt")
+	if err != nil {
+		log.Printf("error while reading cert %v", err)
+		return
+	}
 
 	caCertPool := x509.NewCertPool()
 	if !caCertPool.AppendCertsFromPEM(caCert) {
@@ -112,13 +122,12 @@ func main() {
 	}
 	config := &tls.Config{
 		RootCAs:            caCertPool,
-		ServerName:         "89.125.71.105",
+		ServerName:         *addr,
 		InsecureSkipVerify: false,
 	}
-	conn, err := tls.Dial("tcp", "89.125.71.105:8080", config)
+	conn, err := tls.Dial("tcp", fullAddress, config)
 	if err != nil {
-		log.Printf("Connection error, try again later")
-		log.Printf("If it does not help, contact me in tg: @ramhely")
+		log.Printf("Connection error, try again later, %s", err)
 		return
 	}
 	defer conn.Close()
@@ -140,7 +149,7 @@ func main() {
 		if text == "" {
 			break
 		} else if text == "/health" {
-			go healthCheck()
+			go healthCheck(*addr, *port)
 			continue
 		} else if text == "/list" {
 			go func() {
@@ -167,8 +176,14 @@ func main() {
 				info()
 			}()
 			continue
-		} else if text == "/Change" {
-			go changeNameWhileOnline(nick, conn)
+		} else if strings.HasPrefix(text, "/change") {
+			go func() {
+				newNickNameForChat := strings.SplitN(text, " ", 2)
+				if len(newNickNameForChat) < 2 {
+					log.Printf("Use /change normally")
+				}
+				changeNameWhileOnline(newNickNameForChat[1], conn)
+			}()
 			continue
 		} else if text == "/dice" {
 			go dicefunc()
@@ -182,7 +197,7 @@ func main() {
 		}
 		_, err := conn.Write([]byte(nick + ":" + text + "\n"))
 		if err != nil {
-			log.Printf("Sending error, try contact @ramhely")
+			log.Printf("Sending error %s", err)
 		}
 	}
 }
