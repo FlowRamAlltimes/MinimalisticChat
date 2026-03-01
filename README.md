@@ -6,6 +6,9 @@ Also creates API next to it
 
 Become my mentor please, I really like what I do!
 
+## Architecture
+<img width="715" height="456" alt="изображение" src="https://github.com/user-attachments/assets/edb6addd-badb-4286-971e-3107b8aeb891" />
+
 ## Requirements
 
 1. (If you wanna take my code) - Go 1.22 at least
