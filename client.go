@@ -15,6 +15,12 @@ import (
 	"time"    //ping and other things
 )
 
+const gH = "https://github.com/FlowRamAlltimes/MinimalisticChat/tree/main"
+
+func firstEverBotHere() {
+	fmt.Println("Hello you have used !bot")
+	fmt.Println("!bothelp shows all aviable commands now")
+}
 func dicefunc() {
 	randNum := 0
 	for {
@@ -30,11 +36,12 @@ func dicefunc() {
 
 func changeNameWhileOnline(newname string, conn net.Conn) {
 	conn.Write([]byte(".1wannachangen1ck." + newname))
-	fmt.Printf("Changing nick...")
+	fmt.Printf("Changing nick...\n")
 }
 func info() {
-	fmt.Println("v1.7.1")
+	fmt.Println("v1.7.6")
 	fmt.Println("WELCOME TO MY TCP CHAT")
+	fmt.Println("Creator GitHub:", gH)
 	fmt.Println("It's wonderful place where you can talk with your friends")
 	fmt.Println("If you are fan of old typed chats, I can show you it")
 	fmt.Println("Send your first message!")
@@ -44,6 +51,7 @@ func myIp(conn net.Conn) {
 	fmt.Println("Your IP address is:", conn.RemoteAddr())
 }
 func exitFunc() {
+	fmt.Printf("Closing connection")
 	os.Exit(0)
 }
 func helplist() { // help function its very cool
@@ -53,8 +61,12 @@ func helplist() { // help function its very cool
 	fmt.Println("/list - check all active members")
 	fmt.Println("/help - get help about server")
 	fmt.Println("/quit or /exit - leave chat")
+	fmt.Println("/dice - rand num from 1 to 6")
+	fmt.Println("/change FUTURE_NICKNAME - changes nickname")
+	fmt.Println("/ip - shows your ip(soon it will shows more info, maybe in v.1.8 or later)")
 	fmt.Println("=============================")
 }
+
 func readServerMessages(conn net.Conn) {
 	buf := make([]byte, 256)
 	for {
@@ -67,6 +79,7 @@ func readServerMessages(conn net.Conn) {
 		fmt.Printf(">> %s\n", msg)
 	}
 }
+
 func healthCheck(addr, port string) {
 	fullAddress := fmt.Sprintf(addr + ":" + port)
 
@@ -83,7 +96,7 @@ func healthCheck(addr, port string) {
 }
 
 func list(conn net.Conn) {
-	_, err := conn.Write([]byte(".NEEDYOURDATA.")) // .NEEDYOURDATA.
+	_, err := conn.Write([]byte(".NEEDYOURDATA.")) // .NEEDYOURDATA. is code for getting the info
 	if err != nil {
 		log.Printf("Nothing happened")
 		return
@@ -99,6 +112,7 @@ func list(conn net.Conn) {
 }
 
 func main() {
+	// init flags
 	addr := flag.String("addr", "", "use -addr for connecting")
 	port := flag.String("p", "", "use -p for connecting")
 
@@ -120,9 +134,9 @@ func main() {
 	if len(caCert) == 0 {
 		panic("Cert is unaviable or isnt in workdir!")
 	}
-	config := &tls.Config{
+	config := &tls.Config{ // encrypt config
 		RootCAs:            caCertPool,
-		ServerName:         *addr,
+		ServerName:         *addr, // dynamic address
 		InsecureSkipVerify: false,
 	}
 	conn, err := tls.Dial("tcp", fullAddress, config)
@@ -193,6 +207,25 @@ func main() {
 				log.Printf("Error while sending private msg!")
 				continue
 			}
+			continue
+		} else if text == "!bot" {
+			go firstEverBotHere()
+			continue
+		} else if text == "/whoami" {
+			fmt.Println("You are:", nick)
+			continue
+		} else if text == "!botrand" {
+			fmt.Printf("You are in game-mode")
+			randNum := rand.IntN(100) + 1
+			guess := 0
+			for {
+				fmt.Scan(&guess)
+				if guess == randNum {
+					break
+				}
+				fmt.Println("Nah, its wrong num!")
+			}
+			fmt.Println("Yeah, you have won!")
 			continue
 		}
 		_, err := conn.Write([]byte(nick + ":" + text + "\n"))
