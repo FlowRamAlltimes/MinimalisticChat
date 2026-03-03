@@ -1,4 +1,12 @@
-package main // My TCP chat is here
+// Documentation:
+// This project shows at least the worst part of package net.
+// So the purpose of this code is to understand how tcp and ip works on high-level programming
+// Full explanation is showed in DOCS.md in my GitHub repository
+// Thanks for reading
+// Process of working:
+// Server is running on port that was parsed with -p, -pRst(for http server)
+// After client connects to it with registration, so then you can start chatting with your friends or smb else.
+package main
 
 import (
 	"bufio"
@@ -17,18 +25,24 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-const logfile = "server.log"  // files !WARNING! CHECK IF YOUR FILES USELESS BEFORE OR IT WILL BE PERFECTLY THAT TREY ARE NOT EXIST
-const banlist = "banlist.txt" // IF YOU HAVE THE SAME ONES IT WILL BETTER IF YOU RENAME THEM
+const logfile = "server.log"    // files !WARNING! CHECK IF YOUR FILES USELESS BEFORE OR IT WILL BE PERFECTLY THAT TREY ARE NOT EXIST
+const banlist = "banlist.txt"   // IF YOU HAVE THE SAME ONES IT WILL BETTER IF YOU RENAME THEM
+const mutelist = "mutelist.txt" // ITS FOR MUTES
 
 type server struct {
 	// part of infrastructure
-	mu           sync.RWMutex
-	clients      map[net.Conn]bool
-	banaddresses map[string]string
-	nicknames    map[net.Conn]string // find user by ip in O(1)
-	addresses    map[string]net.Conn // find connection address by nick in O(1)
+	mu            sync.RWMutex
+	clients       map[net.Conn]bool
+	banaddresses  map[string]string
+	muteaddresses map[string]string
+	nicknames     map[net.Conn]string // find user by ip in O(1)
+	addresses     map[string]net.Conn // find connection address by nick in O(1)
 	// part of metrics
 	StartTime    time.Time // uptime check
 	MessagesSend uint64    // all messages counting
@@ -40,11 +54,134 @@ type server struct {
 	AcceptErrors      uint64
 }
 
+var (
+	messagesSent = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "messages_sent",
+		Help: "Total number of messages sent.",
+	}, []string{"messages_all"})
+
+	connErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "conn_err",
+		Help: "Total connectinon errors.",
+	}, []string{"conn_err"})
+
+	writingErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "writing_err",
+		Help: "Total writing errors.",
+	}, []string{"writing_err"})
+
+	certificateErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "cert_err",
+		Help: "Total certificate errors.",
+	}, []string{"cert_err"})
+
+	readingErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "reading_err",
+		Help: "Total reading errors.",
+	}, []string{"reading_err"})
+
+	acceptErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "accept_err",
+		Help: "Total accept errors.",
+	}, []string{"accept_err"})
+
+	errors_total = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "errors_total",
+		Help: "Total errors.",
+	}, []string{"errors_total"})
+)
+
+// copypasted functions btw
+func (s *server) unMuteByIp(targetIP string) bool {
+	err := os.Remove(mutelist)
+	if err != nil {
+		log.Printf("Error when removing/deleting file/user")
+		return false
+	}
+	f, err := os.OpenFile(mutelist, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Printf("Error of appending/creating file")
+		return false
+	}
+	defer f.Close()
+	for val, _ := range s.muteaddresses {
+		if val == targetIP {
+			delete(s.muteaddresses, targetIP)
+		} else {
+			continue // ignoring others(it is possible to do update)
+		}
+	}
+	for value, _ := range s.muteaddresses {
+		io.WriteString(f, value) // sorry for bad naming
+	}
+	return true
+}
+func (s *server) unBanByIp(targetIP string) bool {
+	err := os.Remove(banlist)
+	if err != nil {
+		log.Printf("Error when removing/deleting file/user")
+		return false
+	}
+	f, err := os.OpenFile(banlist, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Printf("Error of appending/creating file")
+		return false
+	}
+	defer f.Close()
+	for val, _ := range s.banaddresses {
+		if val == targetIP {
+			delete(s.banaddresses, targetIP)
+		} else {
+			continue // ignoring others(it is possible to do update)
+		}
+	}
+	for value, _ := range s.banaddresses {
+		io.WriteString(f, value) // sorry for bad naming
+	}
+	return true
+}
+func (s *server) uploadMapForMute(conn net.Conn) {
+	f, err := os.Open(mutelist)
+	if err != nil {
+		log.Printf("Error while opening file")
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+
+	for scanner.Scan() {
+		ip := strings.TrimSpace(scanner.Text())
+		if ip != "" {
+			s.muteaddresses[ip] = "mutedByConsole"
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		log.Printf("Error reading file: %v", err)
+	}
+}
+func (s *server) muteByName(nick string) bool {
+	addr := s.addresses[nick]
+	addrWithout, _, err := net.SplitHostPort(addr.RemoteAddr().String())
+	if err != nil {
+		log.Printf("Error %v", err)
+	}
+	f, error := os.OpenFile(mutelist, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if error != nil {
+		log.Printf("Error opening file %v", error)
+	}
+	defer f.Close()
+
+	io.WriteString(f, addrWithout)
+	addr.Close()
+	return true
+}
+
 func (s *server) checkIpByBanning(conn net.Conn) bool {
 	s.mu.RLock()                                                         // locks
-	defer s.mu.RUnlock()                                                 // unlocks when done
+	defer s.mu.RUnlock()                                                 // unlocks when func is done
 	remoteAddress, _, _ := net.SplitHostPort(conn.RemoteAddr().String()) // remote address
-	// checking for forbidden entrance
+	// checking for entrance
 	_, isBanned := s.banaddresses[remoteAddress]
 
 	if isBanned {
@@ -73,6 +210,7 @@ func (s *server) uploadMapForBan(conn net.Conn) string {
 	for scanner.Scan() {
 		ip := strings.TrimSpace(scanner.Text())
 		if ip != "" {
+			// ban persone
 			s.banaddresses[ip] = "bannedByConsole"
 		}
 	}
@@ -176,8 +314,9 @@ func (s *server) serverinfo(w http.ResponseWriter, r *http.Request) {
 }
 func (s *server) infoPageOfChat(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Hello, its info endpoint of my chat, just test btw. ")
-	fmt.Fprintf(w, "I think that it will be helpful in future. ")
-	fmt.Fprintf(w, "So its my online: %v", len(s.nicknames))
+	fmt.Fprintf(w, "<p>I think that it will be helpful in future.</p>")
+	fmt.Fprintf(w, "<p>So its my online now: %v</p>", len(s.nicknames))
+	fmt.Fprintf(w, "<p><a href=\"https://github.com/FlowRamAlltimes/MinimalisticChat\">It's my GitHub repository</a></p>")
 }
 func (s *server) serverStatusJson(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
@@ -272,7 +411,7 @@ func (s *server) serverCommands(msg string, count, connectErrors, readingErrors,
 		_, err := net.Dial("tcp", addr)
 		if err != nil {
 			fmt.Printf("Ping error")
-			s.ConnectionErrors++
+			errors_total.WithLabelValues("conn_err").Inc()
 			log.Println(err)
 		}
 
@@ -287,6 +426,7 @@ func (s *server) serverCommands(msg string, count, connectErrors, readingErrors,
 		fmt.Println("Uptime:", uptime)
 		fmt.Println("Active connections:", len(s.nicknames))
 		fmt.Println("Go version:", runtime.Version())
+		fmt.Println("Achitecture:", runtime.GOARCH)
 		fmt.Println("All errors:", allErrors)
 		fmt.Println("Connection errors:", connectErrors)
 		fmt.Println("Reading errors:", readingErrors)
@@ -304,6 +444,7 @@ func (s *server) serverCommands(msg string, count, connectErrors, readingErrors,
 
 	case strings.HasPrefix(msg, "/kick"):
 		partsOfKick := strings.SplitN(msg, " ", 2)
+
 		// partsOfKick[0] - /kick
 		// partsOfKick[1] - target
 
@@ -322,6 +463,34 @@ func (s *server) serverCommands(msg string, count, connectErrors, readingErrors,
 			log.Printf("Enemy has been banned by console: %s", partsOfBan[1])
 		} else {
 			log.Printf("Error while banning %s", partsOfBan[1])
+		}
+	case strings.HasPrefix(msg, "/mute"):
+		muteParts := strings.SplitN(msg, " ", 2)
+		// muteParts[0] - /msg
+		// muteParts[1] - nickName
+		result := s.muteByName(muteParts[1])
+		if result == true {
+			fmt.Printf("Target was mute dby console %v", time.Now().Local())
+		}
+	case strings.HasPrefix(msg, "/unmute"):
+		unmutePrts := strings.SplitN(msg, " ", 2)
+		// unmutePrts[0] - /unmute(ignoring)
+		// unmutePrts[1] - targetIP
+		resultOfUnmute := s.unMuteByIp(unmutePrts[1])
+		if resultOfUnmute == true {
+			log.Printf("Unmuting has been made sucessfully!")
+		} else {
+			log.Printf("An error has been here")
+		}
+	case strings.HasPrefix(msg, "/unban"):
+		unbanPrts := strings.SplitN(msg, " ", 2)
+		// unbanPrts[0] - /unmute(ignoring)
+		// unbanPrts[1] - targetIP
+		resultOfUnban := s.unBanByIp(unbanPrts[1])
+		if resultOfUnban == true {
+			log.Printf("Unbanning has been made sucessfully!")
+		} else {
+			log.Printf("An error has been here")
 		}
 	}
 }
@@ -355,7 +524,7 @@ func (s *server) newConnection(conn net.Conn) {
 		n, err := conn.Read(buf)
 		if err != nil {
 			log.Printf("Reading error")
-			s.ReadingErrors++
+			errors_total.WithLabelValues("reading_err").Inc()
 			return
 		}
 		msg := string(buf[:n])
@@ -376,7 +545,7 @@ func (s *server) newConnection(conn net.Conn) {
 			data := strings.Join(nicks, "\n")
 			_, err := conn.Write([]byte(data))
 			if err != nil {
-				s.WritingErrors++
+				errors_total.WithLabelValues("writing_err").Inc()
 				log.Println(err)
 			}
 
@@ -396,10 +565,12 @@ func (s *server) newConnection(conn net.Conn) {
 			if len(parts) < 3 {
 				conn.Write([]byte("You forgot nicks/message, check it!"))
 			}
+
 			// parts[0] = as command /msg, we ignore it but you can use
 			// parts[1] = target nickname
 			// parts[2] = message for target nickname
-			// all is easy
+			// all is easy#
+
 			usrNick := s.nicknames[conn]
 			targetConnResult := s.findByConn(parts[1], parts[2], usrNick)
 			if targetConnResult == "" {
@@ -407,7 +578,9 @@ func (s *server) newConnection(conn net.Conn) {
 			}
 		case strings.HasPrefix(msg, ".1wannachangen1ck."):
 			newNickParts := strings.SplitN(msg, " ", 2)
+
 			// newNickParts[1] = new nickname
+
 			if len(newNickParts) < 2 {
 				conn.Write([]byte("Check rules of writing nickname!"))
 				conn.Close()
@@ -416,7 +589,9 @@ func (s *server) newConnection(conn net.Conn) {
 			resultOfChangingNick := s.nickChange(newNickParts[1], conn, realNick)
 			if resultOfChangingNick == true {
 				newnicktosend := fmt.Sprintf("Your new nick is: " + newNickParts[1])
+
 				// sprint can make strings in common, thats cool
+
 				conn.Write([]byte(newnicktosend))
 			} else if resultOfChangingNick == false {
 				conn.Write([]byte("Error while changing nick! Reconnect again"))
@@ -429,7 +604,7 @@ func (s *server) newConnection(conn net.Conn) {
 	}
 }
 func (s *server) registerUser(nickname string, conn net.Conn) {
-
+	// registring user
 	s.mu.Lock()
 	s.clients[conn] = true
 	s.nicknames[conn] = nickname
@@ -437,21 +612,34 @@ func (s *server) registerUser(nickname string, conn net.Conn) {
 	s.mu.Unlock()
 }
 func (s *server) broadcast(conn net.Conn, msg string) { // this function makes the broadcast
-
-	s.MessagesSend++
+	flag := false
 	s.mu.RLock()
+	defer s.mu.RUnlock()
+	addrWithoutPort, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+	// brilliant idea with flag
+	for connectForbidenMute, _ := range s.muteaddresses {
+		if addrWithoutPort == connectForbidenMute {
+			flag = true
+		}
+	}
+
+	messagesSent.WithLabelValues("messages_all").Inc() // metrics
+
 	for value, _ := range s.clients {
+		if flag == true {
+			conn.Write([]byte("YOU ARE MUTED, STUPID"))
+			continue
+		}
 		if value == conn {
 			continue
 		} else {
 			_, err := value.Write([]byte(msg))
 			if err != nil {
-				s.WritingErrors++
+				errors_total.WithLabelValues("writing_err").Inc()
 				log.Println("Writing error...", err)
 			}
 		}
 	}
-	s.mu.RUnlock()
 }
 func main() {
 	address := flag.String("addr", "", "use for set address of server")
@@ -491,27 +679,40 @@ func main() {
 	log.Println("Log system has started")
 
 	s := &server{
-		clients:      make(map[net.Conn]bool),
-		nicknames:    make(map[net.Conn]string),
-		addresses:    make(map[string]net.Conn),
-		banaddresses: make(map[string]string),
-		StartTime:    time.Now(),
+		clients:       make(map[net.Conn]bool),
+		nicknames:     make(map[net.Conn]string),
+		addresses:     make(map[string]net.Conn),
+		banaddresses:  make(map[string]string),
+		muteaddresses: make(map[string]string),
+		StartTime:     time.Now(),
 	}
 
 	// http server stats in json
+
+	mux := http.NewServeMux() // init new router, soon it will customed
+
 	go func() {
-		http.HandleFunc("/status", s.serverStatusJson)                      // first endpoint
-		http.HandleFunc("/info", s.infoPageOfChat)                          // and the second
-		http.HandleFunc("/server", s.serverinfo)                            // third
+		mux.Handle("/metrics", promhttp.Handler())                          // metrics endpoint for prometheus
+		mux.HandleFunc("/status", s.serverStatusJson)                       // first endpoint
+		mux.HandleFunc("/api", s.infoPageOfChat)                            // and the second
+		mux.HandleFunc("/status/server", s.serverinfo)                      // third
 		log.Printf("Server monitor is aviable on: https://%v", addrForRest) // yeah I finally understood how to run server with https protocol
 
 		portForRESTapiInListenTLS := fmt.Sprintf("0.0.0.0:" + portForRESTapiStr)
 
-		http.ListenAndServeTLS(portForRESTapiInListenTLS, "server.crt", "server.key", nil) // thats convenient as I can use I self-created cert for here
+		APIserver := &http.Server{ // custom running
+			Addr:         portForRESTapiInListenTLS,
+			Handler:      mux,
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 10 * time.Second,
+			IdleTimeout:  120 * time.Second,
+		}
+
+		APIserver.ListenAndServeTLS("server.crt", "server.key") // thats convenient as I can use I self-created cert for here
 	}()
 	cert, err := tls.LoadX509KeyPair("server.crt", "server.key") // and here, btw i used OpenSSL certs
 	if err != nil {
-		s.CertificateErrors++
+		certificateErrors.WithLabelValues("cert_err").Inc()
 		log.Fatal(err)
 	}
 
@@ -546,15 +747,16 @@ func main() {
 		conn, err := listener.Accept()
 
 		if err != nil {
-			s.AcceptErrors++
+			acceptErrors.WithLabelValues("accept_err").Inc()
 			log.Printf("Error of accepting")
 		}
-
+		s.uploadMapForMute(conn)
 		s.uploadMapForBan(conn)
 		if s.checkIpByBanning(conn) == false {
 			go s.newConnection(conn)
 		}
 	}
 }
+
 // I dont know how big it will be soon
 // cool, so i think that i'll grow up soon but who can know the truth if it isnt me . . .
