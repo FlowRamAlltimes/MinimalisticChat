@@ -1,4 +1,4 @@
- # 📞Minimalistic Chat v1.7.5
+ # 📞Minimalistic Chat v1.7.6
 
 Cli TCP chat based on golang
 So you can download it and use now in releases. Made for x86/64🖥️
@@ -15,7 +15,7 @@ Become my mentor please, I really like what I do!
 
 2. Friend or somebody else and a bit of time
 
-3. The disire to spend time here
+3. The desire to spend time here
 
 ## Description
 
@@ -28,7 +28,7 @@ Client part
 
 ```bash
 
-/health - sends you informatin about server
+/health - sends you information about server
 
 /list - sends you all active members
 
