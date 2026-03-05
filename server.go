@@ -425,6 +425,7 @@ func (s *server) serverCommands(msg string, count, connectErrors, readingErrors,
 		if err != nil {
 			fmt.Printf("Ping error")
 			errors_total.WithLabelValues("conn_err").Inc()
+			s.ConnectionErrors++
 			log.Println(err)
 		}
 
@@ -538,6 +539,7 @@ func (s *server) newConnection(conn net.Conn) {
 		if err != nil {
 			log.Printf("Reading error")
 			errors_total.WithLabelValues("reading_err").Inc()
+			s.ReadingErrors++
 			return
 		}
 		msg := string(buf[:n])
@@ -559,6 +561,7 @@ func (s *server) newConnection(conn net.Conn) {
 			_, err := conn.Write([]byte(data))
 			if err != nil {
 				errors_total.WithLabelValues("writing_err").Inc()
+				s.WritingErrors++
 				log.Println(err)
 			}
 
@@ -637,6 +640,7 @@ func (s *server) broadcast(conn net.Conn, msg string) { // this function makes t
 	}
 
 	messagesSent.WithLabelValues("messages_all").Inc() // metrics
+	s.MessagesSend++                                   // other info by /status
 
 	for value, _ := range s.clients {
 		if flag == true {
@@ -649,6 +653,7 @@ func (s *server) broadcast(conn net.Conn, msg string) { // this function makes t
 			_, err := value.Write([]byte(msg))
 			if err != nil {
 				errors_total.WithLabelValues("writing_err").Inc()
+				s.WritingErrors++
 				log.Println("Writing error...", err)
 			}
 		}
@@ -727,6 +732,7 @@ func main() {
 	cert, err := tls.LoadX509KeyPair("server.crt", "server.key") // and here, btw i used OpenSSL certs
 	if err != nil {
 		certificateErrors.WithLabelValues("cert_err").Inc()
+		s.CertificateErrors++
 		log.Fatal(err)
 	}
 
@@ -762,6 +768,7 @@ func main() {
 
 		if err != nil {
 			acceptErrors.WithLabelValues("accept_err").Inc()
+			s.AcceptErrors++
 			log.Printf("Error of accepting")
 		}
 		s.uploadMapForMute(conn)
