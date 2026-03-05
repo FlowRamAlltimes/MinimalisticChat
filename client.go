@@ -41,7 +41,7 @@ func changeNameWhileOnline(newname string, conn net.Conn) {
 func info() {
 	fmt.Println("v1.7.6")
 	fmt.Println("WELCOME TO MY TCP CHAT")
-	fmt.Println("Creator GitHub:", gH)
+	fmt.Println("Creator's GitHub:", gH)
 	fmt.Println("It's wonderful place where you can talk with your friends")
 	fmt.Println("If you are fan of old typed chats, I can show you it")
 	fmt.Println("Send your first message!")
@@ -234,3 +234,4 @@ func main() {
 		}
 	}
 }
+
