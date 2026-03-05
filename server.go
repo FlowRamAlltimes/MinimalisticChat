@@ -92,7 +92,14 @@ var (
 )
 
 // copypasted functions btw
+func mainpage(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "<a href='/metrics'>prometheus metrics</a>")
+	fmt.Fprintf(w, "<a href='/status'>server status</a>")
+	fmt.Fprintf(w, "<a href='/status/server'>server information(in process of making)</a>")
+}
 func (s *server) unMuteByIp(targetIP string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	err := os.Remove(mutelist)
 	if err != nil {
 		log.Printf("Error when removing/deleting file/user")
@@ -117,6 +124,8 @@ func (s *server) unMuteByIp(targetIP string) bool {
 	return true
 }
 func (s *server) unBanByIp(targetIP string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	err := os.Remove(banlist)
 	if err != nil {
 		log.Printf("Error when removing/deleting file/user")
@@ -141,6 +150,8 @@ func (s *server) unBanByIp(targetIP string) bool {
 	return true
 }
 func (s *server) uploadMapForMute(conn net.Conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	f, err := os.Open(mutelist)
 	if err != nil {
 		log.Printf("Error while opening file")
@@ -161,6 +172,8 @@ func (s *server) uploadMapForMute(conn net.Conn) {
 	}
 }
 func (s *server) muteByName(nick string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	addr := s.addresses[nick]
 	addrWithout, _, err := net.SplitHostPort(addr.RemoteAddr().String())
 	if err != nil {
@@ -316,7 +329,7 @@ func (s *server) infoPageOfChat(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Hello, its info endpoint of my chat, just test btw. ")
 	fmt.Fprintf(w, "<p>I think that it will be helpful in future.</p>")
 	fmt.Fprintf(w, "<p>So its my online now: %v</p>", len(s.nicknames))
-	fmt.Fprintf(w, "<p><a href=\"https://github.com/FlowRamAlltimes/MinimalisticChat\">It's my GitHub repository</a></p>")
+	fmt.Fprintf(w, "<p><a href='https://github.com/FlowRamAlltimes/MinimalisticChat'>It's my GitHub repository</a></p>")
 }
 func (s *server) serverStatusJson(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
@@ -691,7 +704,8 @@ func main() {
 
 	mux := http.NewServeMux() // init new router, soon it will customed
 
-	go func() {
+	go func() { // routes
+		mux.HandleFunc("/", mainpage)
 		mux.Handle("/metrics", promhttp.Handler())                          // metrics endpoint for prometheus
 		mux.HandleFunc("/status", s.serverStatusJson)                       // first endpoint
 		mux.HandleFunc("/api", s.infoPageOfChat)                            // and the second
