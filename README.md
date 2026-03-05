@@ -7,7 +7,8 @@ Also creates API next to it
 Become my mentor please, I really like what I do!
 
 ## Architecture
-<img width="715" height="456" alt="изображение" src="https://github.com/user-attachments/assets/edb6addd-badb-4286-971e-3107b8aeb891" />
+<img width="1003" height="600" alt="изображение" src="https://github.com/user-attachments/assets/facfd520-a982-484e-913f-b6bde7ccb292" />
+
 
 ## Requirements
 
